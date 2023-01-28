@@ -1,0 +1,14 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" width="120px" height="125px" viewBox="0 0 24 25" version="1.1">
+    
+    <ns0:title>L</ns0:title>
+    <ns0:desc>Created with Sketch.</ns0:desc>
+    <ns0:defs />
+    <ns0:g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <ns0:g id="Modes-of-transport-and-lines" transform="translate(-171.000000, -1216.000000)">
+            <ns0:g id="L" transform="translate(171.000000, 1216.000000)">
+                <ns0:path d="M0.0004,12.6993 C0.0004,6.0713 5.3724,0.6993 12.0004,0.6993 C18.6274,0.6993 24.0004,6.0713 24.0004,12.6993 C24.0004,19.3263 18.6274,24.6993 12.0004,24.6993 C5.3724,24.6993 0.0004,19.3263 0.0004,12.6993" id="Fill-96" fill="#A7A9AC" />
+                <ns0:polygon id="Fill-97" fill="#FFFFFF" points="8.0209 18.3575 8.0209 7.0415 10.2279 7.0415 10.2279 16.4865 15.9779 16.4865 15.9779 18.3575" />
+            </ns0:g>
+        </ns0:g>
+    </ns0:g>
+</ns0:svg>
