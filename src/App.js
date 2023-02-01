@@ -1,45 +1,110 @@
 // App.js : main app file
 import './App.css';
 import React, { useState, useEffect } from 'react';
-import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
+// import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { MTA, haversineDistance, feedUrl } from './mta';
 // import DeckGL from '@deck.gl/react';
 // import { ScatterplotLayer } from '@deck.gl/layers';
 // import { Map, StaticMap } from 'react-map-gl';
+// import gtfsProtoJson from './data/gtfs-realtime.json';
+import nyctProtoJson from './data/nyct-subway.json';
 
-// const ProtoBuf = require('protobufjs');
-// const nyctSubway = ProtoBuf.loadSync('./src/data/nyct-subway.proto');
+const ProtoBuf = require('protobufjs');
+// const gtfsRealtime = ProtoBuf.Root.fromJSON(gtfsProtoJson);
+const nyctSubway = ProtoBuf.Root.fromJSON(nyctProtoJson);
+// gtfsRealtime.addJSON(nyctProtoJson);
 
-const INITIAL_RADIUS = 300; // meters
-const MIN_RADIUS = 10; // meters
-const MAX_RADIUS = 5000; // meters
+// console.log(gtfsRealtime);
+// console.log(nyctSubway);
+// const FeedMessage = GtfsRealtimeBindings.transit_realtime.FeedMessage;
+const FeedMessage = nyctSubway.lookupType('transit_realtime.FeedMessage').ctor;
 
-const TRIP_ID_RE = /(?<originTime>\d+)_(?<routeId>[0-9A-Z]+)\.\.(?<direction>[N|S])(?<pathId>[0-9A-Z]+)/;
-const NUM_TRAINS = 5; // length of departure tables
+const INITIAL_RADIUS = 0.2; // miles
+const MIN_RADIUS = 0.1; // miles
+const MAX_RADIUS = 20; // miles
 
-// const nyctProtoFile = require('./data/nyct-subway.proto');
+const TRIP_ID_RE = /(?<originTime>\d+)_(?<routeId>[0-9A-Z]+)\.\.(?<direction>[N|S])(?<pathId>[0-9A-Z]*)/;
+const NUM_TRAINS = 3; // length of departure tables
 
-// console.log(nyctProtoFile);
-// ProtoBuf.Root.fromDescriptor(nyctProtoFile)
+const formatDistance = ((num) => {
+  const sigfigs = 2;
+  const rounded = parseFloat(num.toPrecision(sigfigs));
+  return `${rounded} mi`;
+});
+
+const rad2radInd = ((rad) => {
+  const coercedRad = Math.min(Math.max(rad, MIN_RADIUS), MAX_RADIUS); // coerce to MIN and MAX vals
+  console.log(coercedRad);
+  return Math.round(Math.log10(coercedRad) * 3);
+});
+
+const MIN_RAD_IND = rad2radInd(MIN_RADIUS);
+const MAX_RAD_IND = rad2radInd(MAX_RADIUS);
+
+console.log(MIN_RAD_IND);
+console.log(MAX_RAD_IND);
+
+const radInd2rad = ((radInd) => {
+  const coercedRadInd = Math.min(Math.max(radInd, MIN_RAD_IND), MAX_RAD_IND); // coerce to MIN and MAX vals
+  return parseFloat(Math.pow(10, coercedRadInd/3).toPrecision(1));
+});
 
 const NearbyStationsPage = ((props) => {
   const [radius, setRadius] = useState(INITIAL_RADIUS);
-
-  // console.log('Range Selector rendered.');
+  console.log(radius);
 
   const stationsInRadius = (rad)  => {
     const stationDictsWithDist = MTA.STATIONS.map(d => (
-      {...d, ...{Distance: haversineDistance(props.location, [Number(d['GTFS Longitude']), Number(d['GTFS Latitude'])])}}
+      {...d, ...{Distance: haversineDistance(props.location, [Number(d['GTFS Latitude']), Number(d['GTFS Longitude'])])}}
     )).sort((a,b) => a.Distance - b.Distance);
-    console.log(stationDictsWithDist);
-    var stationDictsInRadius;
+    // const stationDictsWithDist = MTA.STATIONS.map(d => ({...d, ...{Distance: NaN}}));
     if (stationDictsWithDist.some(d => d.Distance < rad)) {
-      stationDictsInRadius = stationDictsWithDist.filter(d => d.Distance < rad);
+      const stationDictsToDisplay = stationDictsWithDist.filter(d => d.Distance < rad);
+      return (
+        <>
+          <h2>Stations within {rad} mi:</h2>
+          <div className='stationContainer' >
+            {stationDictsToDisplay.map((d,i) => <Station stationDict={d} key={i} />)}
+          </div>
+        </>
+      );
     } else {
-      stationDictsInRadius = stationDictsWithDist.slice(0,1);
+      const stationDictsToDisplay = stationDictsWithDist.slice(0,1);
+      return (
+        <>
+          <h2>Nearest stations:</h2>
+          <div className='stationContainer' >
+            {stationDictsToDisplay.map((d,i) => <Station stationDict={d} key={i} />)}
+          </div>
+        </>
+      );
     }
-    return stationDictsInRadius.map((d,i) => <Station stationDict={d} key={i} />);
   };
+
+  const formatLocation = ((coords) => {
+    // assuming coords are lat, lon
+
+    const toDMS = ((decDeg) => {
+      const intDeg = Math.floor(decDeg);
+      const intMin = Math.floor((decDeg - intDeg) * 60);
+      const intsec = Math.round((decDeg - intDeg  - intMin / 60) * 3600);
+      return (
+        <>{intDeg}&deg; {intMin}' {intsec}"</>
+      );
+    });
+
+    const northsouthLetter = coords[0] >= 0 ? 'N' : 'S';
+    const eastwestLetter = coords[1] >= 0 ? 'E' : 'W';
+    const absLat = Math.abs(coords[0]);
+    const absLon = Math.abs(coords[1]);
+
+    return (
+      <>
+         {toDMS(absLat)} {northsouthLetter} {toDMS(absLon)} {eastwestLetter}
+      </>
+    );
+
+  });
 
   if (props.location[0]) {
     return (
@@ -71,24 +136,21 @@ const NearbyStationsPage = ((props) => {
             </DeckGL> */}
           </div>
           <div style={{fontStyle: 'italic', margin: '0em 1em 1em 1em'}}>
-              {'Your location is (' + props.location[0].toFixed(4) + ', ' + props.location[1].toFixed(4) + ')'}
+              Your location is {formatLocation(props.location)}
           </div>
           <input 
             type='range'
-            defaultValue={radius}
-            min={MIN_RADIUS}
-            max={MAX_RADIUS}
+            defaultValue={rad2radInd(radius)}
+            min={MIN_RAD_IND}
+            max={MAX_RAD_IND}
             name='radius'
             onChange={(ev) => {
-              setRadius(ev.target.value);
+              setRadius(radInd2rad(ev.target.value));
             }}
           />
-          <label htmlFor='radius'>Radius: {radius} m</label>
+          <label htmlFor='radius'>Radius: {radius} mi</label>
         </div>
-        <h2>Nearest stations:</h2>
-        <div className='stationContainer' >
-          {stationsInRadius(radius)}
-        </div>
+        {stationsInRadius(radius)}
       </>
     );
   } else {
@@ -102,7 +164,6 @@ const Station = ((props) => {
   const [feedEntities, setFeedEntities] = useState([]);
 
   const lines = props.stationDict['Daytime Routes'];
-
   const lineIcons = lines.map((l,i) => 
     <img
       className='nameIcon'
@@ -112,16 +173,14 @@ const Station = ((props) => {
     />
   );
 
-  const buffToFeedEntities = ((arrayBuffer) => {
-    return GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(new Uint8Array(arrayBuffer)).entity;
-  });
-
   const matchingStopTimeUpdate = ((stopTimeUpdate) => {
-    return stopTimeUpdate.stopId.includes(props.stationDict['GTFS Stop ID']);
+    return stopTimeUpdate.stopId.includes(props.stationDict['GTFS Stop ID'])
+    && stopTimeUpdate.departure
+    && stopTimeUpdate.departure.time * 1000 > Date.now();
   });
 
   const matchingTripUpdate = ((tripUpdate) => {
-    return tripUpdate.stopTimeUpdate.some(matchingStopTimeUpdate)
+    return tripUpdate.stopTimeUpdate.some(matchingStopTimeUpdate);
   });
 
   const parseTripId = ((tripId) => {
@@ -143,10 +202,7 @@ const Station = ((props) => {
     const lastUpdate = tripUpdate.stopTimeUpdate[tripUpdate.stopTimeUpdate.length-1];
     const lastStopId = lastUpdate.stopId.replace(/[N|S]$/,'');
     const lastStopName = MTA.STATIONS.find(d => d['GTFS Stop ID'] === lastStopId)['Stop Name'];
-    const departure = matchingUpdate.departure;
-    const departureDate = departure ? new Date(departure.time * 1000) : null;
-    const directionMatch = /[N|S]$/.exec(matchingUpdate.stopId);
-    const direction = directionMatch ? directionMatch[0] : null;
+    const departureDate = matchingUpdate.departure ? new Date(matchingUpdate.departure.time * 1000) : null;
     return {
       line: tripUpdate.trip.routeId,
       departure: departureDate,
@@ -159,29 +215,33 @@ const Station = ((props) => {
     const tripUpdates = entities.filter(en => en.hasOwnProperty('tripUpdate')).map(en => en.tripUpdate);
     const matchingTripUpdates = tripUpdates.filter(matchingTripUpdate);
     const tripDicts = matchingTripUpdates.map(tripUpdateToDict);
-    
     const southTripDicts = tripDicts.filter(d => d.direction === 'S' && d.departure).sort((a,b) => a.departure - b.departure);
     const northTripDicts = tripDicts.filter(d => d.direction === 'N' && d.departure).sort((a,b) => a.departure - b.departure);
   
-    const minutesUntilDate = ((date) => {
+    const formatWaitMinutes = ((date) => {
       const currentDate = new Date();
-      return Math.max((date - currentDate)/60000, 0).toFixed(0);
+      const waitMin = (date - currentDate) / 60000;
+      if (waitMin < 1) {
+        return '< 1';
+      } else {
+        return waitMin.toFixed(0);
+      }
     });
 
     const departureTable = ((tripDicts, label) => {
       return (
         <table className='departureTable' >
-          <thead>
-            <th colSpan="3" >{label}</th>
-          </thead>
           <tbody>
-          {tripDicts.slice(0, NUM_TRAINS).map((d,i) => <tr key={i}>
-            <td>
-              <img className='departureIcon' src={require(`./data/lineIcons/${d.line}.svg`)}
-              alt={d.line + 'icon'}/>
-            </td>
-            <td >{d.lastStop}</td>
-            <td style={{textAlign: 'right'}} >({minutesUntilDate(d.departure)} min)</td>
+          <tr>
+            <th colSpan="3" >{label}</th>
+          </tr>
+            {tripDicts.slice(0, NUM_TRAINS).map((d,i) => <tr key={i}>
+              <td>
+                <img className='departureIcon' src={require(`./data/lineIcons/${d.line}.svg`)}
+                alt={d.line + 'icon'}/>
+              </td>
+              <td >{d.lastStop}</td>
+              <td style={{textAlign: 'right'}} >({formatWaitMinutes(d.departure)} min)</td>
           </tr>)}
           </tbody>
         </table>
@@ -196,25 +256,16 @@ const Station = ((props) => {
     );
   });
 
+  const buffToFeedEntities = ((arrayBuffer) => {
+    return FeedMessage.decode(new Uint8Array(arrayBuffer)).entity;
+  });
+
   useEffect (() => {
     Promise.all([...new Set(lines.map(feedUrl))]
     .map(u => fetch(u, {headers: {'x-api-key': MTA.MTA_KEY}})))
     .then(respList => Promise.all(respList.map(resp => resp.arrayBuffer()))
     .then(buffList => setFeedEntities(buffList.map(buffToFeedEntities).flat(1))));
   }, []);
-
-  const withSigFigs = ((num, sigfigs, unit) => {
-    if (!unit) {
-      const unit = '';
-    }
-
-    const rounded = parseFloat(num.toPrecision(sigfigs));
-    if (rounded < 1000) {
-      return `${rounded} ${unit}`;
-    } else {
-      return `${rounded/1000} k${unit}`;
-    }
-  });
 
   return (
     <div className='station'>
@@ -224,7 +275,7 @@ const Station = ((props) => {
           {lineIcons}
         </span>
         <span className='italic' >
-          ({withSigFigs(props.stationDict.Distance, 2, 'm')})
+          ({formatDistance(props.stationDict.Distance)})
         </span>
       </h4>
       <div className='departureTableContainer'>
@@ -236,17 +287,18 @@ const Station = ((props) => {
 
 const App = () => {
   // const [location, setLocation] = useState([null, null]);
-  const [location, setLocation] = useState([-73.9664714, 40.8057752]);
-  console.log('App rerendered.');
+  const [location, setLocation] = useState([40.8057752, -73.9664714]); // NYC
+  // const [location, setLocation] = useState([37.6130941, -122.384315]); // SF
+  console.log('React App rerendered.');
 
   // console.log('Location fetching turned off!');
-  // useEffect (() => {
-  //   navigator.geolocation.getCurrentPosition((pos) => {
-  //     const lon = pos.coords.longitude;
-  //     const lat = pos.coords.latitude;
-  //     setLocation([lon, lat]);
-  //   });
-  // }, []);
+  useEffect (() => {
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      setLocation([lat, lon]);
+    });
+  }, []);
 
   return (
     <div className='App'>

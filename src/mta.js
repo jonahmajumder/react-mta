@@ -1,5 +1,4 @@
 // mta.js : mta-related helper functions
-import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import stations from './data/stations.json';
 import lineColors from './data/lineColors.json';
 
@@ -42,36 +41,27 @@ export function feedUrl(line) {
     }
 };
 
-// export const getFeed = async (line) => {
-//     const resp = await fetch(
-//         feedUrl(line),
-//         {headers: {'x-api-key': MTA.MTA_KEY}},
-//     );
-//     if (!resp.ok) {
-//         console.error(`${resp.url}: ${resp.status} ${resp.statusText}`);
-//     }
-//     const buffer = await resp.arrayBuffer();
-//     const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(
-//         new Uint8Array(buffer)
-//     );
-//     return feed;
-// };
-
 export const haversineDistance = (point1, point2) => {
-    const lon1 = point1[0] * Math.PI/180;
-    const lon2 = point2[0] * Math.PI/180;
-    const lat1 = point1[1] * Math.PI/180;
-    const lat2 = point2[1] * Math.PI/180;
-    const lonDiff = lon2 - lon1;
+    const deg2rad = deg => deg / 180 * Math.PI;
+    const lat1 = deg2rad(point1[0]);
+    const lat2 = deg2rad(point2[0]);
+    const lon1 = deg2rad(point1[1]);
+    const lon2 = deg2rad(point2[1]);
     const latDiff = lat2 - lat1;
+    const lonDiff = lon2 - lon1;
 
     const hav = (theta) => {return Math.pow(Math.sin(theta / 2), 2)};
-    const invhav = (havtheta) => {return 2 * Math.asin(Math.sqrt(havtheta))};
+    const invhav = (havtheta) => {return 2 * Math.asin(Math.sign(havtheta) * Math.sqrt(Math.abs(havtheta)))};
 
-    const havtheta = hav(latDiff) + Math.cos(point1[1]) * Math.cos(point2[1]) * hav(lonDiff);
+    const havtheta = hav(latDiff) + Math.cos(lat1) * Math.cos(lat2) * hav(lonDiff);
+    // console.log(`cos lat 1: ${Math.cos(lat1).toFixed(6)}`)
+    // console.log(`cos lat 2: ${Math.cos(lat2).toFixed(6)}`)
+    // console.log(`hav lat diff: ${hav(latDiff).toFixed(6)}`);
+    // console.log(`hav lon diff: ${hav(lonDiff).toFixed(6)}`);
+
     const theta = invhav(havtheta);
+    const rEarth = 3957.6; // earth radius at NYC latitude, in miles
 
-    const rEarth = 6.3781e6;
     return rEarth * theta;
 };
 
